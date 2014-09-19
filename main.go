@@ -4,6 +4,7 @@ import (
     "fmt"
     "io/ioutil"
     "net/mail"
+    "sync"
 //  "net/url"
 
     "./mailimport"
@@ -26,16 +27,22 @@ func main() {
     mongo := mailimport.GetConnection()
     defer mongo.Close()
 
-
     // Import all the messages.
+    fmt.Printf("%d messages to import.\n", len(messages))
+
+    // Our semaphore
+    var sem sync.WaitGroup
+
     if len(messages) != 0 {
         for i := 0; i < 1000; i++ {
-            go importMessage(mongo, messages[i])
+            sem.Add(1)
+            go importMessage(mongo, sem, messages[i])
         }
     }
 
-    c := make(chan int)
-    <-c
+    fmt.Println("Waiting.")
+    sem.Wait()
+    fmt.Println("End of execution.")
 }
 
 // FIXME error handling
@@ -56,7 +63,7 @@ func decodeString(content string) string {
     return string(dec)
 }
 
-func importMessage(mongo *mailimport.Mongo, msg *mail.Message) {
+func importMessage(mongo *mailimport.Mongo, sem sync.WaitGroup, msg *mail.Message) {
     // Export headers
     headers := make([]string,len(msg.Header))
     var err error
@@ -123,13 +130,19 @@ func importMessage(mongo *mailimport.Mongo, msg *mail.Message) {
         Subject: subject,
         Body: finalBody }
 
-    //fmt.Printf("Headers: %s\n", importMsg.Headers)
+    /*
+    fmt.Printf("Headers: %s\n", importMsg.Headers)
     fmt.Printf("Date: %s\n", importMsg.Date)
     fmt.Println("Sender: " + importMsg.Sender)
     fmt.Println("Title: " + importMsg.Subject)
     fmt.Println("")
+    */
 
     // Saves in MongoDB
     dao := mailimport.NewMailDAO(mongo)
     dao.Save(importMsg)
+
+    fmt.Println(importMsg.Subject + " imported.")
+
+    sem.Done()
 }
