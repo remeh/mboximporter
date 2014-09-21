@@ -11,7 +11,7 @@ import (
     "strings"
     "sync"
 
-    "./mailimport"
+    "./mboximporter"
     "github.com/bthomson/mbox"
 )
 
@@ -29,7 +29,7 @@ func main() {
     }
 
     // Opens a Mongo connection
-    mongo := mailimport.GetConnection(config)
+    mongo := mboximporter.GetConnection(config)
     defer mongo.Close()
 
     // Some info on numbers
@@ -58,7 +58,7 @@ func main() {
 
 // Prepares the CLI flags for the
 // Mongo connection and the file to import.
-func prepareFlags() mailimport.Config {
+func prepareFlags() mboximporter.Config {
     mongoURI := flag.String("m", "localhost", "The Mongo URI to connect to MongoDB.")
     dbName := flag.String("d", "mails", "The DB name to use in MongoDB.")
     filename := flag.String("f", "mails.mbox", "Name of the filename to import")
@@ -66,10 +66,10 @@ func prepareFlags() mailimport.Config {
 
     flag.Parse()
 
-    return mailimport.Config{MongoURI: *mongoURI, DBName: *dbName, Count: *count, Filename: *filename}
+    return mboximporter.Config{MongoURI: *mongoURI, DBName: *dbName, Count: *count, Filename: *filename}
 }
 
-func importMessage(c mailimport.Config, mongo *mailimport.Mongo, sem *sync.WaitGroup, msg *mail.Message) {
+func importMessage(c mboximporter.Config, mongo *mboximporter.Mongo, sem *sync.WaitGroup, msg *mail.Message) {
     // Export headers
     headers := make([]string,len(msg.Header))
     var err error
@@ -153,7 +153,7 @@ func importMessage(c mailimport.Config, mongo *mailimport.Mongo, sem *sync.WaitG
         return
     }
 
-    importMsg := &mailimport.Mail{
+    importMsg := &mboximporter.Mail{
         Headers: headers,
         Sender: sender,
         Recipients: recipients,
@@ -162,7 +162,7 @@ func importMessage(c mailimport.Config, mongo *mailimport.Mongo, sem *sync.WaitG
         Body: finalBody }
 
     // Saves in MongoDB
-    dao := mailimport.NewMailDAO(c, mongo)
+    dao := mboximporter.NewMailDAO(c, mongo)
     dao.Save(importMsg)
 
     log.Println("\"" + importMsg.Subject + "\" imported.")
