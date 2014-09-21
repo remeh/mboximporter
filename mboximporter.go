@@ -11,7 +11,7 @@ import (
     "strings"
     "sync"
 
-    "./mboximporter"
+    "./src"
     "github.com/bthomson/mbox"
 )
 
