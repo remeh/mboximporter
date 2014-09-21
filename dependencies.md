@@ -1,3 +1,3 @@
 # Dependencies 
   - "github.com/bthomson/mbox"
-  - github.com/alexcesaro/mail/quotedprintable
+  - "labix.org/v2/mgo"

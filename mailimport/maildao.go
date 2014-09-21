@@ -22,8 +22,8 @@ type MailDAO struct {
 // ---------------------- 
 // Methods
 
-func NewMailDAO(m *Mongo) *MailDAO {
-    return &MailDAO{m, m.GetCollection(COLLECTION_MAIL)}
+func NewMailDAO(c Config, m *Mongo) *MailDAO {
+    return &MailDAO{m, m.GetCollection(c, COLLECTION_MAIL)}
 }
 
 func (d *MailDAO) Save(mail *Mail) error {

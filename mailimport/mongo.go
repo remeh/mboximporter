@@ -18,10 +18,9 @@ type Mongo struct {
 // Methods
 
 // Retrieves a new Mongo Connection.
-// TODO pool of a sessions / connections
-func GetConnection() *Mongo {
+func GetConnection(c Config) *Mongo {
     m := new(Mongo)
-    session, err := mgo.Dial("localhost, localhost")
+    session, err := mgo.Dial(c.MongoURI)
     if err != nil {
         panic(err)
     }
@@ -29,9 +28,8 @@ func GetConnection() *Mongo {
     return m
 }
 
-func (m *Mongo) GetCollection(name string) *mgo.Collection {
-    // TODO db name
-    return m.session.DB("mails").C(name)
+func (m *Mongo) GetCollection(c Config, name string) *mgo.Collection {
+    return m.session.DB(c.DBName).C(name)
 }
 
 func (m *Mongo) Close() {
