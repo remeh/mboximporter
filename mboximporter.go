@@ -130,11 +130,13 @@ func importMessage(c mboximporter.Config, mongo *mboximporter.Mongo, sem *sync.W
                 break
             }
             if err != nil {
-                log.Fatal(err)
+                log.Println(err)
+                return
             }
             slurp, err := ioutil.ReadAll(p)
             if err != nil {
-                log.Fatal(err)
+                log.Println(err)
+                return
             }
             finalBody += string(slurp)
         }
