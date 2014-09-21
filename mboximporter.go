@@ -85,7 +85,8 @@ func importMessage(c mboximporter.Config, mongo *mboximporter.Mongo, sem *sync.W
             sender = v[0] // FIXME could have many values
             if err != nil {
                 log.Println("Unable to unescape the sender.")
-                log.Fatal(err)
+                log.Println(err)
+                return
             }
         } else if k == "To" {
             recipients = v
@@ -93,7 +94,8 @@ func importMessage(c mboximporter.Config, mongo *mboximporter.Mongo, sem *sync.W
             subject = v[0] // FIXME could have many values
             if err != nil {
                 log.Println("Unable to unescape the subject.")
-                log.Fatal(err)
+                log.Println(err)
+                return
             }
         } else if k == "Content-Type" {
             contentType = v[0]
@@ -111,7 +113,9 @@ func importMessage(c mboximporter.Config, mongo *mboximporter.Mongo, sem *sync.W
     // Creates a reader.
     mediaType, params, err := mime.ParseMediaType(contentType)
     if err != nil {
-        log.Fatal("Unable to read the type of the content.")
+        log.Println("Unable to read the type of the content.")
+        log.Println(err)
+        return
     }
     reader := multipart.NewReader(msg.Body, params["boundary"])
 
@@ -144,7 +148,7 @@ func importMessage(c mboximporter.Config, mongo *mboximporter.Mongo, sem *sync.W
     date, err := msg.Header.Date()
     if err != nil {
         log.Println("Unable to read the date.")
-        log.Fatal(err)
+        log.Println(err)
         return
     }
 
