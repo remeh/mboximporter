@@ -70,6 +70,8 @@ func prepareFlags() mboximporter.Config {
 }
 
 func importMessage(c mboximporter.Config, mongo *mboximporter.Mongo, sem *sync.WaitGroup, msg *mail.Message) {
+    defer sem.Done()
+
     // Export headers
     headers := make([]string,len(msg.Header))
     var err error
@@ -165,5 +167,4 @@ func importMessage(c mboximporter.Config, mongo *mboximporter.Mongo, sem *sync.W
     dao.Save(importMsg)
 
     log.Println("\"" + importMsg.Subject + "\" imported.")
-    sem.Done()
 }
