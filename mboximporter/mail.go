@@ -1,4 +1,4 @@
-package mailimport
+package mboximporter
 
 import (
     "time"

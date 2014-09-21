@@ -1,4 +1,4 @@
-package mailimport
+package mboximporter
 
 import (
     "labix.org/v2/mgo"

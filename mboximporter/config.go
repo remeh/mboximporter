@@ -1,4 +1,4 @@
-package mailimport
+package mboximporter
 
 // App configuration.
 type Config struct {

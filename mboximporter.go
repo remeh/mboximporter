@@ -87,23 +87,18 @@ func importMessage(c mboximporter.Config, mongo *mboximporter.Mongo, sem *sync.W
                 log.Println("Unable to unescape the sender.")
                 log.Fatal(err)
             }
-        }
-        if k == "To" {
+        } else if k == "To" {
             recipients = v
-        }
-        if k == "Subject" {
+        } else if k == "Subject" {
             subject = v[0] // FIXME could have many values
             if err != nil {
                 log.Println("Unable to unescape the subject.")
                 log.Fatal(err)
             }
-        }
-        if k == "Content-Type" {
+        } else if k == "Content-Type" {
             contentType = v[0]
-        }
-
-        // Ignore chat messages from GMail
-        if k == "X-Gmail-Labels" && v[0][0:4] == "Chat" {
+        } else if k == "X-Gmail-Labels" && v[0][0:4] == "Chat" {
+            // Ignore chat messages from GMail
             return
         }
 
