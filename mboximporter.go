@@ -10,14 +10,24 @@ import (
     "net/mail"
     "strings"
     "sync"
+    "time"
 
     "./src"
     "github.com/bthomson/mbox"
 )
 
 func main() {
+    var ignoredChatMessage int
+
     // Flags 
     config := prepareFlags()
+
+    // Opens a Mongo connection
+    mongo := mboximporter.GetConnection(config)
+    defer mongo.Close()
+
+    // Prepare the channel we'll use as a queue of message to process
+    messagesToDo := make(chan mail.Message, config.Concurrency)
 
     // Reads the data.
     messages, err := mbox.ReadFile(config.Filename, true)
@@ -28,31 +38,34 @@ func main() {
         return
     }
 
-    // Opens a Mongo connection
-    mongo := mboximporter.GetConnection(config)
-    defer mongo.Close()
+    // Creates the workers
+    var wg sync.WaitGroup
+    var sem sync.WaitGroup
+    for i := 0; i < config.Workers; i++ {
+        wg.Add(1)
+        go func(sem *sync.WaitGroup) {
+            for message := range messagesToDo {
+                importMessage(config, mongo, sem, &ignoredChatMessage, &message)
+            }
+            wg.Done()
+        }(&sem)
+    }
 
-    // Some info on numbers
+    // Amount to import
     log.Printf("%d messages to import.\n", len(messages))
     maxMessages := len(messages)
     countToImport := config.Count
     if config.Count == -1 {
         countToImport = maxMessages
     }
-
-    // Our semaphore
-    var sem sync.WaitGroup
-
-    // Do the actual work of importing the mails.
-    if len(messages) != 0 {
-        for i := 0; i < countToImport; i++ {
-            sem.Add(1)
-            go importMessage(config, mongo, &sem, messages[i])
-        }
+    for i := 0; i < countToImport; i++ {
+        messagesToDo <- *messages[i] // Enqueue the message to be processed
+        sem.Add(1)
     }
 
     log.Println("Working.")
     sem.Wait()
+    log.Printf("Ignored %d chat messages.", ignoredChatMessage)
     log.Println("End of execution.")
 }
 
@@ -62,14 +75,16 @@ func prepareFlags() mboximporter.Config {
     mongoURI := flag.String("m", "localhost", "The Mongo URI to connect to MongoDB.")
     dbName := flag.String("d", "mails", "The DB name to use in MongoDB.")
     filename := flag.String("f", "mails.mbox", "Name of the filename to import")
-    count := flag.Int("c", -1, "Number of mails to import.")
+    workers := flag.Int("w", 10, "Maximum amount of workers.")
+    concurrency := flag.Int("c", 20, "Maximum amount of messages in the same time in the pool of process.")
+    count := flag.Int("n", -1, "Number of mails to import.")
 
     flag.Parse()
 
-    return mboximporter.Config{MongoURI: *mongoURI, DBName: *dbName, Count: *count, Filename: *filename}
+    return mboximporter.Config{MongoURI: *mongoURI, DBName: *dbName, Count: *count, Filename: *filename, Concurrency: *concurrency, Workers: *workers}
 }
 
-func importMessage(c mboximporter.Config, mongo *mboximporter.Mongo, sem *sync.WaitGroup, msg *mail.Message) {
+func importMessage(c mboximporter.Config, mongo *mboximporter.Mongo, sem *sync.WaitGroup, ignoredChatMessage *int, msg *mail.Message) {
     defer sem.Done()
 
     // Export headers
@@ -103,6 +118,7 @@ func importMessage(c mboximporter.Config, mongo *mboximporter.Mongo, sem *sync.W
             contentType = v[0]
         } else if k == "X-Gmail-Labels" && v[0][0:4] == "Chat" {
             // Ignore chat messages from GMail
+            *ignoredChatMessage++
             return
         }
 
@@ -167,6 +183,8 @@ func importMessage(c mboximporter.Config, mongo *mboximporter.Mongo, sem *sync.W
     // Saves in MongoDB
     dao := mboximporter.NewMailDAO(c, mongo)
     dao.Save(importMsg)
+
+    time.Sleep(15)
 
     log.Println("\"" + importMsg.Subject + "\" imported.")
 }
