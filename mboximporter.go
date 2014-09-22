@@ -13,18 +13,20 @@ import (
     "time"
 
     "./src"
+    "gopkg.in/mgo.v2"
     "github.com/bthomson/mbox"
 )
 
 func main() {
-    var ignoredChatMessage int
+    var process mboximporter.Process
 
     // Flags 
     config := prepareFlags()
 
-    // Opens a Mongo connection
+    // Opens a Mongo connection and prepare some tools to write
     mongo := mboximporter.GetConnection(config)
     defer mongo.Close()
+    dao := mboximporter.NewMailDAO(config, mongo)
 
     // Prepare the channel we'll use as a queue of message to process
     messagesToDo := make(chan mail.Message, config.Concurrency)
@@ -43,12 +45,30 @@ func main() {
     var sem sync.WaitGroup
     for i := 0; i < config.Workers; i++ {
         wg.Add(1)
-        go func(sem *sync.WaitGroup) {
+
+        go func(sem *sync.WaitGroup, dao *mboximporter.MailDAO) {
+            // Each workers has its bulk to avoid
+            // race condition between them.
+            bulk := dao.NewBulk()
+            bulk.Unordered()
+
+            processed := 0 // number of processed messages by this worker
             for message := range messagesToDo {
-                importMessage(config, mongo, sem, &ignoredChatMessage, &message)
+                importMessage(config, dao, bulk, sem, &process, &message)
+
+                if processed % 500 == 0 {
+                    // Executes the bulk
+                    bulk.Run()
+                    // Creates a new one for this worker
+                    bulk = dao.NewBulk()
+                    bulk.Unordered()
+                }
+
+                // Last inserts
+                bulk.Run()
             }
             wg.Done()
-        }(&sem)
+        }(&sem, dao)
     }
 
     // Amount to import
@@ -65,7 +85,10 @@ func main() {
 
     log.Println("Working.")
     sem.Wait()
-    log.Printf("Ignored %d chat messages.", ignoredChatMessage)
+    log.Printf("Processed %d messages :", process.ProcessedMessages+process.IgnoredChatMessages)
+    log.Printf("- Imported %d messages.", process.ProcessedMessages)
+    log.Printf("- Ignored %d chat messages.", process.IgnoredChatMessages)
+    log.Printf("- Errored on %d messages.", countToImport - (process.ProcessedMessages+process.IgnoredChatMessages))
     log.Println("End of execution.")
 }
 
@@ -84,7 +107,7 @@ func prepareFlags() mboximporter.Config {
     return mboximporter.Config{MongoURI: *mongoURI, DBName: *dbName, Count: *count, Filename: *filename, Concurrency: *concurrency, Workers: *workers}
 }
 
-func importMessage(c mboximporter.Config, mongo *mboximporter.Mongo, sem *sync.WaitGroup, ignoredChatMessage *int, msg *mail.Message) {
+func importMessage(c mboximporter.Config, dao *mboximporter.MailDAO, bulk *mgo.Bulk, sem *sync.WaitGroup, process *mboximporter.Process, msg *mail.Message) {
     defer sem.Done()
 
     // Export headers
@@ -118,7 +141,7 @@ func importMessage(c mboximporter.Config, mongo *mboximporter.Mongo, sem *sync.W
             contentType = v[0]
         } else if k == "X-Gmail-Labels" && v[0][0:4] == "Chat" {
             // Ignore chat messages from GMail
-            *ignoredChatMessage++
+            process.IgnoredChatMessages++
             return
         }
 
@@ -180,11 +203,11 @@ func importMessage(c mboximporter.Config, mongo *mboximporter.Mongo, sem *sync.W
         Subject: subject,
         Body: finalBody }
 
-    // Saves in MongoDB
-    dao := mboximporter.NewMailDAO(c, mongo)
-    dao.Save(importMsg)
+    // Saves the writes into the Bulk
+    bulk.Insert(importMsg)
 
     time.Sleep(15)
 
+    process.ProcessedMessages++
     log.Println("\"" + importMsg.Subject + "\" imported.")
 }

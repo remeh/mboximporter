@@ -1,7 +1,7 @@
 package mboximporter
 
 import (
-    "labix.org/v2/mgo"
+    "gopkg.in/mgo.v2"
 )
 
 // ---------------------- 

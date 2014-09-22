@@ -1,8 +1,8 @@
 package mboximporter
 
 import (
-    "labix.org/v2/mgo"
-    "labix.org/v2/mgo/bson"
+    "gopkg.in/mgo.v2"
+    "gopkg.in/mgo.v2/bson"
 )
 
 const (
@@ -24,6 +24,10 @@ type MailDAO struct {
 
 func NewMailDAO(c Config, m *Mongo) *MailDAO {
     return &MailDAO{m, m.GetCollection(c, COLLECTION_MAIL)}
+}
+
+func (d *MailDAO) NewBulk() *mgo.Bulk {
+    return d.collection.Bulk()
 }
 
 func (d *MailDAO) Save(mail *Mail) error {
