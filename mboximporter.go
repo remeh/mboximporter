@@ -17,7 +17,7 @@ import (
 )
 
 func main() {
-    var ignoredChatMessage int
+    var process mboximporter.Process
 
     // Flags 
     config := prepareFlags()
@@ -45,7 +45,7 @@ func main() {
         wg.Add(1)
         go func(sem *sync.WaitGroup) {
             for message := range messagesToDo {
-                importMessage(config, mongo, sem, &ignoredChatMessage, &message)
+                importMessage(config, mongo, sem, &process, &message)
             }
             wg.Done()
         }(&sem)
@@ -65,7 +65,10 @@ func main() {
 
     log.Println("Working.")
     sem.Wait()
-    log.Printf("Ignored %d chat messages.", ignoredChatMessage)
+    log.Printf("Processed %d messages :", process.ProcessedMessages+process.IgnoredChatMessages)
+    log.Printf("- Imported %d messages.", process.ProcessedMessages)
+    log.Printf("- Ignored %d chat messages.", process.IgnoredChatMessages)
+    log.Printf("- Errored on %d messages.", countToImport - (process.ProcessedMessages+process.IgnoredChatMessages))
     log.Println("End of execution.")
 }
 
@@ -84,7 +87,7 @@ func prepareFlags() mboximporter.Config {
     return mboximporter.Config{MongoURI: *mongoURI, DBName: *dbName, Count: *count, Filename: *filename, Concurrency: *concurrency, Workers: *workers}
 }
 
-func importMessage(c mboximporter.Config, mongo *mboximporter.Mongo, sem *sync.WaitGroup, ignoredChatMessage *int, msg *mail.Message) {
+func importMessage(c mboximporter.Config, mongo *mboximporter.Mongo, sem *sync.WaitGroup, process *mboximporter.Process, msg *mail.Message) {
     defer sem.Done()
 
     // Export headers
@@ -118,7 +121,7 @@ func importMessage(c mboximporter.Config, mongo *mboximporter.Mongo, sem *sync.W
             contentType = v[0]
         } else if k == "X-Gmail-Labels" && v[0][0:4] == "Chat" {
             // Ignore chat messages from GMail
-            *ignoredChatMessage++
+            process.IgnoredChatMessages++
             return
         }
 
@@ -186,5 +189,6 @@ func importMessage(c mboximporter.Config, mongo *mboximporter.Mongo, sem *sync.W
 
     time.Sleep(15)
 
+    process.ProcessedMessages++
     log.Println("\"" + importMsg.Subject + "\" imported.")
 }
