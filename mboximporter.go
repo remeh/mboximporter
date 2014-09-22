@@ -40,37 +40,22 @@ func main() {
         return
     }
 
-    // Creates the workers
-    var wg sync.WaitGroup
     var sem sync.WaitGroup
+
+    // Each workers has its own bulk to avoid
+    // race condition between them.
+    bulks := make([]*mgo.Bulk,config.Workers)
     for i := 0; i < config.Workers; i++ {
-        wg.Add(1)
+        bulks[i] = dao.NewBulk()
+    }
 
-        go func(sem *sync.WaitGroup, dao *mboximporter.MailDAO) {
-            // Each workers has its bulk to avoid
-            // race condition between them.
-            bulk := dao.NewBulk()
-            bulk.Unordered()
-
-            processed := 0 // number of processed messages by this worker
+    // Creates the workers
+    for i := 0; i < config.Workers; i++ {
+        go func(dao *mboximporter.MailDAO, sem *sync.WaitGroup, bulk *mgo.Bulk) {
             for message := range messagesToDo {
-                importMessage(config, dao, bulk, sem, &process, &message)
-                processed++
-
-                if processed % 500 == 0 {
-                    // Executes the bulk
-                    bulk.Run()
-                    // Creates a new one for this worker
-                    bulk = dao.NewBulk()
-                    bulk.Unordered()
-                    log.Prinltn("Bulk wrote.")
-                }
-
-                // Last inserts
-                bulk.Run()
+                importMessage(config, dao, bulk, &process, sem, &message)
             }
-            wg.Done()
-        }(&sem, dao)
+        }(dao, &sem, bulks[i])
     }
 
     // Amount to import
@@ -81,12 +66,19 @@ func main() {
         countToImport = maxMessages
     }
     for i := 0; i < countToImport; i++ {
-        messagesToDo <- *messages[i] // Enqueue the message to be processed
         sem.Add(1)
+        messagesToDo <- *messages[i] // Enqueue the message to be processed
     }
 
-    log.Println("Working.")
+
+    log.Println("Waiting for the workers to do their job.")
     sem.Wait()
+
+    // Process the last bulks
+    for i := 0; i < config.Workers; i++ {
+         bulks[i].Run()
+    }
+
     log.Printf("Processed %d messages :", process.ProcessedMessages+process.IgnoredChatMessages)
     log.Printf("- Imported %d messages.", process.ProcessedMessages)
     log.Printf("- Ignored %d chat messages.", process.IgnoredChatMessages)
@@ -109,7 +101,7 @@ func prepareFlags() mboximporter.Config {
     return mboximporter.Config{MongoURI: *mongoURI, DBName: *dbName, Count: *count, Filename: *filename, Concurrency: *concurrency, Workers: *workers}
 }
 
-func importMessage(c mboximporter.Config, dao *mboximporter.MailDAO, bulk *mgo.Bulk, sem *sync.WaitGroup, process *mboximporter.Process, msg *mail.Message) {
+func importMessage(c mboximporter.Config, dao *mboximporter.MailDAO, bulk *mgo.Bulk, process *mboximporter.Process, sem *sync.WaitGroup, msg *mail.Message) {
     defer sem.Done()
 
     // Export headers

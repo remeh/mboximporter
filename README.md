@@ -10,7 +10,7 @@ On my machine (core i7, 8gb of ram), it imports approximately `2500 mails/second
 
 ```
 go get github.com/bthomson/mbox
-go get labix.org/v2/mgo
+go get gopkg.in/mgo.v2
 go build mboximporter.go
 
 ```
