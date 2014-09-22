@@ -55,6 +55,7 @@ func main() {
             processed := 0 // number of processed messages by this worker
             for message := range messagesToDo {
                 importMessage(config, dao, bulk, sem, &process, &message)
+                processed++
 
                 if processed % 500 == 0 {
                     // Executes the bulk
@@ -62,6 +63,7 @@ func main() {
                     // Creates a new one for this worker
                     bulk = dao.NewBulk()
                     bulk.Unordered()
+                    log.Prinltn("Bulk wrote.")
                 }
 
                 // Last inserts
@@ -209,5 +211,5 @@ func importMessage(c mboximporter.Config, dao *mboximporter.MailDAO, bulk *mgo.B
     time.Sleep(15)
 
     process.ProcessedMessages++
-    log.Println("\"" + importMsg.Subject + "\" imported.")
+    //log.Println("\"" + importMsg.Subject + "\" imported.")
 }
