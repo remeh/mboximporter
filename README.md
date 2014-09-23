@@ -4,7 +4,7 @@ A basic tool to import your `.mbox` file into MongoDB for query.
 
 It's just a basic side-project development developed in a few hours for fun. Don't hesitate to provide pull-requests or to submit ideas.
 
-On my machine (core i7, 8gb of ram), it imports approximately `2500 mails/second`.
+On my machine (core i5, 8gb of ram), it imports approximately `2500 mails/second`.
 
 ## Build
 
