@@ -23,8 +23,11 @@ func main() {
     config := prepareFlags()
 
     // Opens a Mongo connection
-    mongo := mboximporter.GetConnection(config)
-    defer mongo.Close()
+    var mongo *mboximporter.Mongo
+    if (config.Database == "mongo") {
+        mongo = mboximporter.GetConnection(config)
+        defer mongo.Close()
+    }
 
     // Prepare the channel we'll use as a queue of message to process
     messagesToDo := make(chan mail.Message, config.Concurrency)
@@ -43,12 +46,18 @@ func main() {
     var sem sync.WaitGroup
     for i := 0; i < config.Workers; i++ {
         wg.Add(1)
-        go func(sem *sync.WaitGroup) {
+        go func(config *mboximporter.Config, sem *sync.WaitGroup) {
+            var dao mboximporter.MailDAO
+            if (config.Database == "postgres") {
+                dao = mboximporter.NewMailPGDAO(*config)
+            } else {
+                dao = mboximporter.NewMailMongoDAO(*config, mongo)
+            }
             for message := range messagesToDo {
-                importMessage(config, mongo, sem, &process, &message)
+                importMessage(*config, &dao, sem, &process, &message)
             }
             wg.Done()
-        }(&sem)
+        }(&config, &sem)
     }
 
     // Amount to import
@@ -76,18 +85,29 @@ func main() {
 // Mongo connection and the file to import.
 func prepareFlags() mboximporter.Config {
     mongoURI := flag.String("m", "localhost", "The Mongo URI to connect to MongoDB.")
-    dbName := flag.String("d", "mails", "The DB name to use in MongoDB.")
+    mongoDBName := flag.String("d", "mails", "The DB name to use in MongoDB/PG.")
     filename := flag.String("f", "mails.mbox", "Name of the filename to import")
     workers := flag.Int("w", 10, "Maximum amount of workers.")
     concurrency := flag.Int("c", 20, "Maximum amount of messages in the same time in the pool of process.")
     count := flag.Int("n", -1, "Number of mails to import.")
+    database := flag.String("database", "mongo", "Database to use : mongo or postgresql")
+    postgresuser := flag.String("pguser", "postgres", "Postgres user to user")
+    postgrespasswd := flag.String("pgpasswd", "", "Postgres password for the user")
+    postgresdb := flag.String("pgdatabase", "mbox", "Postgres databse to use")
+    postgresschema := flag.String("pgschema", "mails", "Postgres schema to use")
+    postgrestable := flag.String("pgtable", "mail", "Postgres table name to use")
 
     flag.Parse()
 
-    return mboximporter.Config{MongoURI: *mongoURI, DBName: *dbName, Count: *count, Filename: *filename, Concurrency: *concurrency, Workers: *workers}
+    return mboximporter.Config{MongoURI: *mongoURI, MongoDBName: *mongoDBName, Count: *count, Filename: *filename, Concurrency: *concurrency, Workers: *workers, Database: *database,
+                               PostgresUser: *postgresuser,
+                               PostgresPassword: *postgrespasswd,
+                               PostgresDatabase: *postgresdb,
+                               PostgresSchema: *postgresschema,
+                               PostgresTable: *postgrestable}
 }
 
-func importMessage(c mboximporter.Config, mongo *mboximporter.Mongo, sem *sync.WaitGroup, process *mboximporter.Process, msg *mail.Message) {
+func importMessage(c mboximporter.Config, dao *mboximporter.MailDAO, sem *sync.WaitGroup, process *mboximporter.Process, msg *mail.Message) {
     defer sem.Done()
 
     // Export headers
@@ -184,8 +204,7 @@ func importMessage(c mboximporter.Config, mongo *mboximporter.Mongo, sem *sync.W
         Body: finalBody }
 
     // Saves in MongoDB
-    dao := mboximporter.NewMailDAO(c, mongo)
-    dao.Save(importMsg)
+    (*dao).Save(importMsg)
 
     time.Sleep(15)
 

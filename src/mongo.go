@@ -29,7 +29,7 @@ func GetConnection(c Config) *Mongo {
 }
 
 func (m *Mongo) GetCollection(c Config, name string) *mgo.Collection {
-    return m.session.DB(c.DBName).C(name)
+    return m.session.DB(c.MongoDBName).C(name)
 }
 
 func (m *Mongo) Close() {
